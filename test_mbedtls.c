@@ -3,8 +3,41 @@
 #include <unistd.h>
 #include <strings.h>
 #include <stdlib.h>
+#include <getopt.h>
+
 #include <mbedtls/config.h>
 #include <mbedtls/aes.h>
+
+#define NO_ARG				0
+#define HAS_ARG				1
+
+static struct option long_options[] = {
+	{"aes", HAS_ARG, 0, 'a'},
+	{"function", HAS_ARG, 0, 'f'},
+	{"serialNumber", NO_ARG, 0, 's'},
+	{"macAddress", NO_ARG, 0, 'm'},
+	{0, 0, 0, 0}
+};
+
+static const char *short_options = "Vvf:MmSs";
+
+void usage(void)
+{
+	int i;
+
+	printf("\mbedtls usage:\n");
+	for (i = 0; i < sizeof(long_options) / sizeof(long_options[0]) - 1; i++) 
+	{
+		if (isalpha(long_options[i].val))
+			printf("-%c ", long_options[i].val);
+		else
+			printf("   ");
+		printf("--%s", long_options[i].name);
+
+	}
+	printf("\n");
+}
+
 
 #define AES_KEY_LEN  16
 // key: 35408382fef5a3decf784f74d3f1d97e
@@ -15,31 +48,72 @@ int save_file(const char *path, const unsigned char *data, unsigned int size);
 int main(int argc, char *argv[])
 {
 	int cbc_result = -1;
-	char *key_file = "aes.key";
 	unsigned char iv[16] = {0};
 	char msg[16+1] = "0123456789abcdef";
 	char enc_buf[16+1] = {0};
 	char dec_buf[16+1] = {0};
-
 	char fileName[16] = "Makefile";
 	
 	unsigned char key[AES_KEY_LEN] = {0};
 	mbedtls_aes_context ctx;
+	char aes_mode[8] = {0};
+	
+	int ch;
+	int option_index = 0;
+	opterr = 0;
+	while ((ch = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1)
+	{
+		switch (ch) 
+		{
+			case 'f':
+				printf("optind = %d, optarg = %s\n", optind, optarg);
+				break;
+			case 'v':
+			//version_flag = 1;
+				break;
+
+			case 's':
+			//serialNumber_flag = 1;
+				break;
+
+			case 'M':
+			case 'm':
+			//macAddress_flag = 1;
+				break;
+			case 'a':
+				strcpy(aes_mode, optarg);
+				printf("aes_mode = %s\n", aes_mode);
+			//all_flag = 1;
+				break;
+
+			default:
+			printf("unknown option found: %c\n", ch);
+			return -1;
+		}
+	}
+
+	
 	mbedtls_aes_init(&ctx);
 
-	load_key(key_file, key, sizeof(key));
-	mbedtls_aes_setkey_enc(&ctx, key, AES_KEY_LEN*8);
+	if(strcmp(aes_mode, "cbc-128") == 0)
+	{
+		char key_file_128[16] = "aes128.key";
+		load_key(key_file_128, key, sizeof(key));
+		mbedtls_aes_setkey_enc(&ctx, key, AES_KEY_LEN*8);
+		
+		int len = sizeof(msg) - 1;
+		cbc_result = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, len, iv, msg, enc_buf);
+		//cbc_result = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT,msg, enc_buf);
+		printf("ENC: cbc_result = %d, msg:[%s] -> dec_buf:[%s]\n",cbc_result, msg, enc_buf);
+		
+		memset(iv, 0x0, sizeof(iv));
+		mbedtls_aes_setkey_dec(&ctx, key, AES_KEY_LEN*8);
+		cbc_result = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, len, iv, enc_buf, dec_buf);
+		//cbc_result = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_DECRYPT,msg, enc_buf);
+		printf("DEC: cbc_result = %d, [%s] -> dec = [%s]\n",cbc_result, enc_buf, dec_buf);
 
-	int len = sizeof(msg) - 1;
-	cbc_result = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, len, iv, msg, enc_buf);
-	//cbc_result = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT,msg, enc_buf);
-	printf("ENC: cbc_result = %d, msg:[%s] -> dec_buf:[%s]\n",cbc_result, msg, enc_buf);
+	}
 
-	memset(iv, 0x0, sizeof(iv));
-	mbedtls_aes_setkey_dec(&ctx, key, AES_KEY_LEN*8);
-	cbc_result = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, len, iv, enc_buf, dec_buf);
-	//cbc_result = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_DECRYPT,msg, enc_buf);
-	printf("DEC: cbc_result = %d, [%s] -> dec = [%s]\n",cbc_result, enc_buf, dec_buf);
 	
 	mbedtls_aes_free( &ctx );
     return 0;
