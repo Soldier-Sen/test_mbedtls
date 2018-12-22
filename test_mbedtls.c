@@ -2,7 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <strings.h>
-
+#include <stdlib.h>
 #include <mbedtls/config.h>
 #include <mbedtls/aes.h>
 
@@ -14,9 +14,10 @@ int save_file(const char *path, const unsigned char *data, unsigned int size);
 
 int main(int argc, char *argv[])
 {
+	int cbc_result = -1;
 	char *key_file = "aes.key";
 	unsigned char iv[16] = {0};
-	char msg[16] = "hello ipcam";
+	char msg[16+1] = "0123456789abcdef";
 	char enc_buf[16+1] = {0};
 	char dec_buf[16+1] = {0};
 
@@ -27,15 +28,18 @@ int main(int argc, char *argv[])
 	mbedtls_aes_init(&ctx);
 
 	load_key(key_file, key, sizeof(key));
-	mbedtls_aes_setkey_enc(&ctx, key, sizeof(key)*8);
+	mbedtls_aes_setkey_enc(&ctx, key, AES_KEY_LEN*8);
 
-	int len = sizeof(msg);
-	int cbc_result = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, len, iv, msg, enc_buf);
+	int len = sizeof(msg) - 1;
+	cbc_result = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, len, iv, msg, enc_buf);
+	//cbc_result = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT,msg, enc_buf);
 	printf("ENC: cbc_result = %d, msg:[%s] -> dec_buf:[%s]\n",cbc_result, msg, enc_buf);
 
+	memset(iv, 0x0, sizeof(iv));
+	mbedtls_aes_setkey_dec(&ctx, key, AES_KEY_LEN*8);
 	cbc_result = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, len, iv, enc_buf, dec_buf);
-	printf("DEC: cbc_result = %d, [%s] -> dec = %s\n",cbc_result, enc_buf, dec_buf);
-	//printf("ENC: cbc_result = %d\n",cbc_result);
+	//cbc_result = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_DECRYPT,msg, enc_buf);
+	printf("DEC: cbc_result = %d, [%s] -> dec = [%s]\n",cbc_result, enc_buf, dec_buf);
 	
 	mbedtls_aes_free( &ctx );
     return 0;
